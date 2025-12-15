@@ -1,38 +1,38 @@
 const express = require("express");
-const Story = require("../Models/StoryModel")
-const auth = require("../middleware/auth");
+const Chapter = require("../Models/Chapter"); // your chapter schema
+const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
+
+// CREATE CHAPTER
 router.post("/", auth, async (req, res) => {
     try {
-        const story = await Story.create({
+        const chapter = await Chapter.create({
+            storyId: req.body.storyId,
             title: req.body.title,
-            tags: req.body.tags,
-            cover: req.body.cover,
-            description: req.body.description,
-            author: req.user.id
+            content: req.body.content,
+            parentChapterId: req.body.parentChapterId || null,
+            author: req.user.id,
         });
 
-        res.json({ storyId: story._id });
+        res.status(201).json({ chapterId: chapter._id });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 });
 
-/**
- * GET STORY (ownership check)
- */
+// GET CHAPTER BY ID (ownership check)
 router.get("/:id", auth, async (req, res) => {
-    const story = await Story.findOne({
+    const chapter = await Chapter.findOne({
         _id: req.params.id,
-        author: req.user.id
+        author: req.user.id,
     });
 
-    if (!story) {
+    if (!chapter) {
         return res.status(403).json({ error: "Access denied" });
     }
 
-    res.json(story);
+    res.json(chapter);
 });
 
 module.exports = router;
