@@ -16,6 +16,21 @@ const chapterSchema = new mongoose.Schema({
         default: null
     },
 
+    chapterNumber: {
+        type: Number,
+        required: true
+    },
+
+    isMainBranch: {
+        type: Boolean,
+        default: true
+    },
+
+    branchTitle: {
+        type: String,
+        default: null
+    },
+
     author: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
