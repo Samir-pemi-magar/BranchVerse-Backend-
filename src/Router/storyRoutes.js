@@ -1,33 +1,18 @@
 const express = require("express");
-const Story = require("../Models/StoryModel");
 const auth = require("../middleware/authMiddleware");
 const upload = require("../middleware/upload");
+const storyController = require("../Controller/StoryController");
 
 const router = express.Router();
 
-router.post("/", auth, upload.single("cover"), async (req, res) => {
-    try {
-        const story = await Story.create({
-            title: req.body.title,
-            // FormData sends tags as string if only one, array if multiple
-            tags: Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags],
-            description: req.body.description,
-            branchAllowed: req.body.branchAllowed === "true",
-            cover: req.file.path,
-            author: req.user.id,
-        });
+router.post("/", auth, upload.single("cover"), storyController.createStory);
 
-        // Send clear JSON response
-        res.status(201).json({
-            storyId: story._id,
-            message: "Story created successfully",
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
-    }
-});
+router.get("/feed/trending", storyController.getTrendingStories);
+router.get("/feed/recommended", auth, storyController.getRecommendedStories);
+router.get("/feed/personalized", auth, storyController.getPersonalizedFeed);
 
-
+router.get("/cover/:id", storyController.getCover);
+router.get("/:id", storyController.getStoryById);
+router.get("/", storyController.getAllStories);
 
 module.exports = router;
