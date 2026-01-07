@@ -4,17 +4,12 @@ const auth = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// CREATE CHAPTER
+// ==================== CREATE CHAPTER ====================
 router.post("/", auth, async (req, res) => {
     try {
-        const {
-            storyId,
-            title,
-            content,
-            parentChapterId,
-            branchTitle
-        } = req.body;
+        const { storyId, title, content, parentChapterId, branchTitle } = req.body;
 
+        // Determine next chapter number in the story
         const lastChapter = await Chapter.findOne({ storyId })
             .sort({ chapterNumber: -1 });
 
@@ -25,33 +20,64 @@ router.post("/", auth, async (req, res) => {
             title,
             content,
             parentChapterId: parentChapterId || null,
-
-            // ✅ MAIN vs BRANCH LOGIC (THIS IS THE KEY CHANGE)
-            isMainBranch: !parentChapterId,
+            isMainBranch: !parentChapterId, // main if no parent
             branchTitle: parentChapterId ? (branchTitle || "Untitled Branch") : null,
-
             chapterNumber,
             author: req.user.id,
         });
 
-        res.status(201).json({ chapterId: chapter._id });
+        res.status(201).json({ chapterId: chapter._id, message: "Chapter created successfully" });
     } catch (err) {
+        console.error(err);
         res.status(400).json({ error: err.message });
     }
 });
 
-// GET CHAPTER (ownership check)
-router.get("/:id", auth, async (req, res) => {
-    const chapter = await Chapter.findOne({
-        _id: req.params.id,
-        author: req.user.id,
-    });
+// GET MAIN STORYLINE CHAPTERS (metadata only)
+router.get("/:storyId/main", async (req, res) => {
+    try {
+        const chapters = await Chapter.find(
+            { storyId: req.params.storyId, isMainBranch: true },
+            { title: 1, chapterNumber: 1 } // only return title and chapterNumber
+        ).sort({ chapterNumber: 1 });
 
-    if (!chapter) {
-        return res.status(403).json({ error: "Access denied" });
+        res.json(chapters);
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
     }
+});
 
-    res.json(chapter);
+
+// ==================== READ SINGLE CHAPTER ====================
+router.get("/read/:storyId/:chapterId", async (req, res) => {
+    try {
+        const chapter = await Chapter.findOne({
+            _id: req.params.chapterId,
+            storyId: req.params.storyId
+        });
+
+        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
+
+        res.json(chapter);
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// ==================== GET BRANCHES OF A CHAPTER ====================
+router.get("/branches/:chapterId", async (req, res) => {
+    try {
+        const branches = await Chapter.find({
+            parentChapterId: req.params.chapterId
+        }).sort({ createdAt: 1 });
+
+        res.json(branches);
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
+    }
 });
 
 module.exports = router;

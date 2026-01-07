@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
     verified: {
         type: Boolean,
         default: false
-    }
+    },
+    preferences: {
+        genres: { type: [String], default: [] },
+        interests: { type: String, default: "" },
+    },
 });
 module.exports = mongoose.model("User", userSchema);

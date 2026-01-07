@@ -6,44 +6,88 @@ const jwt = require("jsonwebtoken");
 
 //this is Signup page
 exports.Signup = async (req, res) => {
-    try {
-        console.log("this is signup")
-        const { username, email, password } = req.body;
-        const existingUser = await User.findOne({ email });
-        if (existingUser) return res.status(400).json({ msg: "Email alredy exists" });
-        const hashed = await hashPassword(password);
-        const user = await User.create({ username, email, password: hashed });
-        const token = generateToken(user._id);
-        await sendVerificationEmail(email, token);
-        res.status(201).json({ msg: "Signup successful", user });
-    }
-    catch (err) {
-        res.status(500).json({ msg: "Server error", error: err });
-    }
+  try {
+    console.log("this is signup")
+    const { username, email, password } = req.body;
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ msg: "Email alredy exists" });
+    const hashed = await hashPassword(password);
+    const user = await User.create({ username, email, password: hashed });
+    const token = generateToken(user._id);
+    await sendVerificationEmail(email, token);
+    res.status(201).json({ msg: "Signup successful", user });
+  }
+  catch (err) {
+    res.status(500).json({ msg: "Server error", error: err });
+  }
 }
 //this is Login page
 exports.Login = async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ msg: "User not found" });
-        const isMatch = await comparePassword(password, user.password);
-        if (!isMatch) return res.status(400).json({ msg: "Invalid Password" });
-        if (!user.verified) return res.status(400).json({ msg: "Please verify your email first" });
-        const token = generateToken(user._id);
-        res.status(201).json({ msg: "Login Sucessful", token });
-    }
-    catch (err) {
-        res.status(500).json({ msg: "Server error", error: err });
-    }
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ msg: "User not found" });
+    const isMatch = await comparePassword(password, user.password);
+    if (!isMatch) return res.status(400).json({ msg: "Invalid Password" });
+    if (!user.verified) return res.status(400).json({ msg: "Please verify your email first" });
+    const token = generateToken(user._id);
+    res.status(201).json({ msg: "Login Sucessful", token });
+  }
+  catch (err) {
+    res.status(500).json({ msg: "Server error", error: err });
+  }
 }
+
+// Save user preferences
+exports.savePreferences = async (req, res) => {
+  try {
+    const { genres, interests } = req.body;
+
+    if (!genres || !Array.isArray(genres) || genres.length === 0) {
+      return res.status(400).json({ msg: "Select at least one genre" });
+    }
+
+    // req.user is added by the protect middleware
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    user.preferences = { genres, interests };
+    await user.save();
+
+    res.status(200).json({ msg: "Preferences saved!", preferences: user.preferences });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+exports.getPreferences = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("preferences");
+
+    if (!user) {
+      return res.status(404).json({ msg: "User not found" });
+    }
+
+    if (!user.preferences || !user.preferences.genres?.length) {
+      return res.status(200).json({ preferences: null });
+    }
+
+    res.status(200).json({ preferences: user.preferences });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+
 exports.Verify = async (req, res) => {
-    try {
-        const data = jwt.verify(req.params.token, process.env.JWT_SECRET);
+  try {
+    const data = jwt.verify(req.params.token, process.env.JWT_SECRET);
 
-        await User.findByIdAndUpdate(data.id, { verified: true });
+    await User.findByIdAndUpdate(data.id, { verified: true });
 
-        res.send(`
+    res.send(`
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -100,8 +144,8 @@ exports.Verify = async (req, res) => {
       </body>
       </html>
     `);
-    } catch (err) {
-        res.send(`
+  } catch (err) {
+    res.send(`
       <!DOCTYPE html>
       <html lang="en">
       <head>
@@ -158,7 +202,7 @@ exports.Verify = async (req, res) => {
       </body>
       </html>
     `);
-    }
+  }
 };
 
 
