@@ -14,5 +14,7 @@ router.get("/feed/personalized", auth, storyController.getPersonalizedFeed);
 router.get("/cover/:id", storyController.getCover);
 router.get("/:id", storyController.getStoryById);
 router.get("/", storyController.getAllStories);
+router.get("/feed/filter", storyController.getFilteredStories);
+
 
 module.exports = router;

@@ -55,6 +55,30 @@ exports.getAllStories = async (req, res) => {
 };
 
 /**
+ * GET STORIES BY FILTER
+ */
+exports.getFilteredStories = async (req, res) => {
+    try {
+        const { tags } = req.query; // comma separated tags from frontend
+        let filter = {};
+
+        if (tags) {
+            const tagsArray = tags.split(","); // e.g. tags=adventure,romance
+            filter.tags = { $in: tagsArray };
+        }
+
+        const stories = await Story.find(filter)
+            .populate("author", "username")
+            .sort({ createdAt: -1 });
+
+        res.json(stories);
+    } catch (err) {
+        res.status(500).json({ msg: err.message });
+    }
+};
+
+
+/**
  * GET SINGLE STORY (+ VIEW COUNT)
  */
 exports.getStoryById = async (req, res) => {
