@@ -1,146 +1,25 @@
 const express = require("express");
-const Chapter = require("../Models/Chapter");
 const auth = require("../middleware/authMiddleware");
+const chapterController = require("../Controller/ChapterController");
 
 const router = express.Router();
 
-// ==================== CREATE CHAPTER ====================
-router.post("/", auth, async (req, res) => {
-    try {
-        const { storyId, title, content, parentChapterId, branchTitle } = req.body;
+// Create chapter
+router.post("/", auth, chapterController.createChapter);
 
-        // Determine next chapter number in the story
-        const lastChapter = await Chapter.findOne({ storyId })
-            .sort({ chapterNumber: -1 });
+// Get main storyline chapters
+router.get("/:storyId/main", chapterController.getMainChapters);
 
-        const chapterNumber = lastChapter ? lastChapter.chapterNumber + 1 : 1;
+// Read single chapter with metadata
+router.get("/read/:storyId/:chapterId", chapterController.readChapter);
 
-        const chapter = await Chapter.create({
-            storyId,
-            title,
-            content,
-            parentChapterId: parentChapterId || null,
-            isMainBranch: !parentChapterId, // main if no parent
-            branchTitle: parentChapterId ? (branchTitle || "Untitled Branch") : null,
-            chapterNumber,
-            author: req.user.id,
-        });
+// Like a chapter
+router.post("/:chapterId/like", auth, chapterController.likeChapter);
 
-        res.status(201).json({ chapterId: chapter._id, message: "Chapter created successfully" });
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
-    }
-});
+// Comment on a chapter
+router.post("/:chapterId/comment", auth, chapterController.commentChapter);
 
-// GET MAIN STORYLINE CHAPTERS (metadata only)
-router.get("/:storyId/main", async (req, res) => {
-    try {
-        const chapters = await Chapter.find(
-            { storyId: req.params.storyId, isMainBranch: true },
-            { title: 1, chapterNumber: 1 } // only return title and chapterNumber
-        ).sort({ chapterNumber: 1 });
-
-        res.json(chapters);
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
-    }
-});
-
-
-// ==================== READ SINGLE CHAPTER WITH META ====================
-router.get("/read/:storyId/:chapterId", async (req, res) => {
-    try {
-        const { storyId, chapterId } = req.params;
-
-        const chapter = await Chapter.findOne({
-            _id: chapterId,
-            storyId
-        });
-
-        if (!chapter) {
-            return res.status(404).json({ error: "Chapter not found" });
-        }
-
-        // 👁️ increment views
-        chapter.views += 1;
-        await chapter.save();
-
-        // 🌿 count branches
-        const branchCount = await Chapter.countDocuments({
-            parentChapterId: chapter._id
-        });
-
-        // 📘 fetch story meta
-        const Story = require("../Models/StoryModel");
-        const story = await Story.findById(storyId).select("cover tags");
-
-        res.json({
-            ...chapter.toObject(),
-            branchCount,
-            cover: story?.cover || null,
-            tags: story?.tags || []
-        });
-
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
-    }
-});
-
-// LIKE CHAPTER
-router.post("/:chapterId/like", auth, async (req, res) => {
-    try {
-        const chapter = await Chapter.findById(req.params.chapterId);
-        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
-
-        if (!chapter.likedBy.includes(req.user._id)) {
-            chapter.likes += 1;
-            chapter.likedBy.push(req.user._id);
-            await chapter.save();
-        }
-
-        res.json({ likes: chapter.likes });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-});
-
-router.post("/:chapterId/comment", auth, async (req, res) => {
-    try {
-        const chapter = await Chapter.findById(req.params.chapterId);
-        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
-
-        chapter.comments.push({
-            user: req.user._id,
-            text: req.body.text
-        });
-
-        await chapter.save();
-
-        // Populate username for comments
-        const populated = await Chapter.findById(req.params.chapterId)
-            .populate("comments.user", "username");
-
-        res.json(populated.comments);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-});
-
-// ==================== GET BRANCHES OF A CHAPTER ====================
-router.get("/branches/:chapterId", async (req, res) => {
-    try {
-        const branches = await Chapter.find({
-            parentChapterId: req.params.chapterId
-        }).sort({ createdAt: 1 });
-
-        res.json(branches);
-    } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
-    }
-});
+// Get branches of a chapter
+router.get("/branches/:chapterId", chapterController.getBranches);
 
 module.exports = router;
