@@ -23,6 +23,13 @@ const storySchema = new mongoose.Schema({
 
     views: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
+    comments: [
+        {
+            user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            text: String,
+            createdAt: { type: Date, default: Date.now }
+        }
+    ],
 
     branchAllowed: { type: Boolean, default: false },
 
@@ -32,7 +39,8 @@ const storySchema = new mongoose.Schema({
         default: 0,
         min: 0,
     },
-    
+    likedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
 
     createdAt: { type: Date, default: Date.now },
 });

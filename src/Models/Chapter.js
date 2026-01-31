@@ -36,10 +36,15 @@ const chapterSchema = new mongoose.Schema({
         ref: "User",
         required: true
     },
-    likes: {
-        type: Number,
-        default: 0
-    },
+    likes: { type: Number, default: 0 },
+    comments: [
+        {
+            user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+            text: String,
+            createdAt: { type: Date, default: Date.now }
+        }
+    ],
+    likedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
     // 👁️ NEW
     views: {
