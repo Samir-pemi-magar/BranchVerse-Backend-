@@ -198,3 +198,47 @@ exports.getPersonalizedFeed = async (req, res) => {
         res.status(500).json({ msg: err.message });
     }
 };
+
+// LIKE STORY
+exports.likeStory = async (req, res) => {
+    try {
+        const story = await Story.findById(req.params.storyId);
+        if (!story) return res.status(404).json({ msg: "Story not found" });
+
+        // ✅ only allow one like per user
+        if (!story.likedBy.includes(req.user._id)) {
+            story.likes += 1;
+            story.likedBy.push(req.user._id);
+            await story.save();
+        }
+
+        res.json({ likes: story.likes });
+    } catch (err) {
+        res.status(500).json({ msg: err.message });
+    }
+};
+
+// COMMENT STORY
+exports.commentStory = async (req, res) => {
+    try {
+        const story = await Story.findById(req.params.storyId);
+        if (!story) return res.status(404).json({ msg: "Story not found" });
+
+        story.comments.push({
+            user: req.user._id,
+            text: req.body.text
+        });
+
+        await story.save();
+
+        // Populate username for the new comment
+        const populated = await Story.findById(req.params.storyId)
+            .populate("comments.user", "username");
+
+        res.json(populated.comments);
+    } catch (err) {
+        res.status(500).json({ msg: err.message });
+    }
+};
+
+

@@ -89,26 +89,45 @@ router.get("/read/:storyId/:chapterId", async (req, res) => {
     }
 });
 
-// ==================== LIKE CHAPTER ====================
+// LIKE CHAPTER
 router.post("/:chapterId/like", auth, async (req, res) => {
     try {
-        const chapter = await Chapter.findByIdAndUpdate(
-            req.params.chapterId,
-            { $inc: { likes: 1 } },
-            { new: true }
-        );
+        const chapter = await Chapter.findById(req.params.chapterId);
+        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
 
-        if (!chapter) {
-            return res.status(404).json({ error: "Chapter not found" });
+        if (!chapter.likedBy.includes(req.user._id)) {
+            chapter.likes += 1;
+            chapter.likedBy.push(req.user._id);
+            await chapter.save();
         }
 
         res.json({ likes: chapter.likes });
     } catch (err) {
-        console.error(err);
         res.status(400).json({ error: err.message });
     }
 });
 
+router.post("/:chapterId/comment", auth, async (req, res) => {
+    try {
+        const chapter = await Chapter.findById(req.params.chapterId);
+        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
+
+        chapter.comments.push({
+            user: req.user._id,
+            text: req.body.text
+        });
+
+        await chapter.save();
+
+        // Populate username for comments
+        const populated = await Chapter.findById(req.params.chapterId)
+            .populate("comments.user", "username");
+
+        res.json(populated.comments);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
 
 // ==================== GET BRANCHES OF A CHAPTER ====================
 router.get("/branches/:chapterId", async (req, res) => {
