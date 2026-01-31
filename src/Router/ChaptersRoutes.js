@@ -49,22 +49,66 @@ router.get("/:storyId/main", async (req, res) => {
 });
 
 
-// ==================== READ SINGLE CHAPTER ====================
+// ==================== READ SINGLE CHAPTER WITH META ====================
 router.get("/read/:storyId/:chapterId", async (req, res) => {
     try {
+        const { storyId, chapterId } = req.params;
+
         const chapter = await Chapter.findOne({
-            _id: req.params.chapterId,
-            storyId: req.params.storyId
+            _id: chapterId,
+            storyId
         });
 
-        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
+        if (!chapter) {
+            return res.status(404).json({ error: "Chapter not found" });
+        }
 
-        res.json(chapter);
+        // 👁️ increment views
+        chapter.views += 1;
+        await chapter.save();
+
+        // 🌿 count branches
+        const branchCount = await Chapter.countDocuments({
+            parentChapterId: chapter._id
+        });
+
+        // 📘 fetch story meta
+        const Story = require("../Models/StoryModel");
+        const story = await Story.findById(storyId).select("cover tags");
+
+        res.json({
+            ...chapter.toObject(),
+            branchCount,
+            cover: story?.cover || null,
+            tags: story?.tags || []
+        });
+
     } catch (err) {
         console.error(err);
         res.status(400).json({ error: err.message });
     }
 });
+
+// ==================== LIKE CHAPTER ====================
+router.post("/:chapterId/like", auth, async (req, res) => {
+    try {
+        const chapter = await Chapter.findByIdAndUpdate(
+            req.params.chapterId,
+            { $inc: { likes: 1 } },
+            { new: true }
+        );
+
+        if (!chapter) {
+            return res.status(404).json({ error: "Chapter not found" });
+        }
+
+        res.json({ likes: chapter.likes });
+    } catch (err) {
+        console.error(err);
+        res.status(400).json({ error: err.message });
+    }
+});
+
 
 // ==================== GET BRANCHES OF A CHAPTER ====================
 router.get("/branches/:chapterId", async (req, res) => {
