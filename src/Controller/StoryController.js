@@ -199,24 +199,32 @@ exports.getPersonalizedFeed = async (req, res) => {
     }
 };
 
-// LIKE STORY
-exports.likeStory = async (req, res) => {
+// TOGGLE LIKE STORY
+exports.toggleLikeStory = async (req, res) => {
     try {
         const story = await Story.findById(req.params.storyId);
         if (!story) return res.status(404).json({ msg: "Story not found" });
 
-        // ✅ only allow one like per user
-        if (!story.likedBy.includes(req.user._id)) {
+        const userId = req.user._id.toString();
+
+        if (story.likedBy.includes(userId)) {
+            // User already liked → remove like
+            story.likes -= 1;
+            story.likedBy = story.likedBy.filter(id => id.toString() !== userId);
+        } else {
+            // User hasn’t liked → add like
             story.likes += 1;
-            story.likedBy.push(req.user._id);
-            await story.save();
+            story.likedBy.push(userId);
         }
 
-        res.json({ likes: story.likes });
+        await story.save();
+
+        res.json({ likes: story.likes, liked: story.likedBy.includes(userId) });
     } catch (err) {
         res.status(500).json({ msg: err.message });
     }
 };
+
 
 // COMMENT STORY
 exports.commentStory = async (req, res) => {

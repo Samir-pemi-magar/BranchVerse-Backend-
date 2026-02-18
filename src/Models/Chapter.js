@@ -41,9 +41,17 @@ const chapterSchema = new mongoose.Schema({
         {
             user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
             text: String,
-            createdAt: { type: Date, default: Date.now }
+            createdAt: { type: Date, default: Date.now },
+            replies: [
+                {
+                    user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+                    text: String,
+                    createdAt: { type: Date, default: Date.now }
+                }
+            ]
         }
     ],
+
     likedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
     // 👁️ NEW

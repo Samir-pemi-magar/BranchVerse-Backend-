@@ -15,8 +15,7 @@ router.get("/cover/:id", storyController.getCover);
 router.get("/:id", storyController.getStoryById);
 router.get("/", storyController.getAllStories);
 router.get("/feed/filter", storyController.getFilteredStories);
-router.post("/:storyId/like", auth, storyController.likeStory);
-router.post("/:storyId/comment", auth, storyController.commentStory);
+router.post("/:storyId/like", auth, storyController.toggleLikeStory);
 
 
 module.exports = router;

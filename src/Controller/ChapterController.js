@@ -70,23 +70,34 @@ exports.readChapter = async (req, res) => {
     }
 };
 
-// ==================== LIKE CHAPTER ====================
+// ==================== LIKE / UNLIKE CHAPTER ====================
 exports.likeChapter = async (req, res) => {
     try {
         const chapter = await Chapter.findById(req.params.chapterId);
         if (!chapter) return res.status(404).json({ error: "Chapter not found" });
 
-        if (!chapter.likedBy.includes(req.user._id)) {
+        let liked = false;
+
+        // Toggle like/unlike
+        if (chapter.likedBy.includes(req.user._id)) {
+            chapter.likes -= 1;
+            chapter.likedBy = chapter.likedBy.filter(
+                userId => userId.toString() !== req.user._id.toString()
+            );
+        } else {
             chapter.likes += 1;
             chapter.likedBy.push(req.user._id);
-            await chapter.save();
+            liked = true;
         }
 
-        res.json({ likes: chapter.likes });
+        await chapter.save();
+
+        res.json({ likes: chapter.likes, liked });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 };
+
 
 // ==================== COMMENT ON CHAPTER ====================
 exports.commentChapter = async (req, res) => {
@@ -109,6 +120,22 @@ exports.commentChapter = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 };
+exports.getComments = async (req, res) => {
+    try {
+        const chapter = await Chapter.findById(
+            req.params.chapterId,
+            { comments: 1 }
+        ).populate("comments.user", "username");
+
+        if (!chapter)
+            return res.status(404).json({ error: "Chapter not found" });
+
+        res.json(chapter.comments);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
 
 // ==================== GET BRANCHES OF A CHAPTER ====================
 exports.getBranches = async (req, res) => {
@@ -120,3 +147,35 @@ exports.getBranches = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 };
+
+// POST /api/chapters/:chapterId/comment/:commentId/reply
+exports.replyToComment = async (req, res) => {
+    try {
+        const { chapterId, commentId } = req.params;
+        const { text } = req.body;
+
+        const chapter = await Chapter.findById(chapterId);
+        if (!chapter) return res.status(404).json({ error: "Chapter not found" });
+
+        const comment = chapter.comments.id(commentId);
+        if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+        comment.replies.push({
+            user: req.user._id,
+            text
+        });
+
+        await chapter.save();
+
+        // Return updated comments populated with usernames
+        const populated = await Chapter.findById(chapterId).populate(
+            "comments.user comments.replies.user",
+            "username"
+        );
+
+        res.json(populated.comments);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+

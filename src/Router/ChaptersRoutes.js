@@ -22,4 +22,10 @@ router.post("/:chapterId/comment", auth, chapterController.commentChapter);
 // Get branches of a chapter
 router.get("/branches/:chapterId", chapterController.getBranches);
 
+// Get comments of a chapter
+router.get("/:chapterId/comments", chapterController.getComments);
+
+router.post("/:chapterId/comment/:commentId/reply", auth, chapterController.replyToComment);
+
+
 module.exports = router;
