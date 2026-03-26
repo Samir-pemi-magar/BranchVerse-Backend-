@@ -6,6 +6,7 @@ const router = express.Router();
 
 // Create chapter
 router.post("/", auth, chapterController.createChapter);
+router.get("/my-branches", auth, chapterController.getMyBranches);
 
 // Get main storyline chapters
 router.get("/:storyId/main", chapterController.getMainChapters);
@@ -26,6 +27,10 @@ router.get("/branches/:chapterId", chapterController.getBranches);
 router.get("/:chapterId/comments", chapterController.getComments);
 
 router.post("/:chapterId/comment/:commentId/reply", auth, chapterController.replyToComment);
+
+// Get all chapters in hierarchical structure (main + branches)
+router.get("/story/:storyId/hierarchy", chapterController.getChaptersHierarchy);
+
 
 
 module.exports = router;
