@@ -16,6 +16,9 @@ const chapterSchema = new mongoose.Schema({
         default: null
     },
 
+    tags: [{ type: String }],
+    genre: [{ type: String }],
+
     chapterNumber: {
         type: Number,
         required: true

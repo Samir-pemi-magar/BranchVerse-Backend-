@@ -7,6 +7,10 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS,
     },
 });
+transporter.verify((err, success) => {
+    if (err) console.error("SMTP error:", err);
+    else console.log("SMTP ready to send emails");
+});
 
 async function sendVerificationEmail(email, token) {
     const verifyUrl = `${process.env.BASE_URL}/api/auth/verify/${token}`;
@@ -26,12 +30,18 @@ async function sendVerificationEmail(email, token) {
     </div>
   `;
 
-    await transporter.sendMail({
-        from: `"BranchVerse" <${process.env.EMAIL_USER}>`,
-        to: email,
-        subject: "Verify Your Email Address",
-        html,
-    });
+    try {
+        await transporter.sendMail({
+            from: `"BranchVerse" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: "Verify Your Email Address",
+            html,
+        });
+        console.log("Email sent to", email);
+    } catch (err) {
+        console.error("Failed to send email:", err);
+        throw err; // keeps 500 for now
+    }
 }
 
 module.exports = sendVerificationEmail;

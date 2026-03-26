@@ -1,26 +1,36 @@
+const mongoose = require("mongoose");
 const User = require("../Models/Users");
 const { hashPassword, comparePassword } = require("../Utils/hashPassword");
 const generateToken = require("../Utils/generateToken");
 const sendVerificationEmail = require("../Utils/VerificationMailer");
 const jwt = require("jsonwebtoken");
+const getGridFS = require("../config/Gridfs");
+const checkAchievements = require("../Utils/achivement");
 
-//this is Signup page
 exports.Signup = async (req, res) => {
   try {
-    console.log("this is signup")
+    console.log("this is signup");
+    console.log("Received body:", req.body); // <--- add this
     const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      console.log("Missing fields!", req.body);
+      return res.status(400).json({ msg: "All fields are required" });
+    }
+
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ msg: "Email alredy exists" });
+    if (existingUser) return res.status(400).json({ msg: "Email already exists" });
+
     const hashed = await hashPassword(password);
     const user = await User.create({ username, email, password: hashed });
     const token = generateToken(user._id);
     await sendVerificationEmail(email, token);
     res.status(201).json({ msg: "Signup successful", user });
-  }
-  catch (err) {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ msg: "Server error", error: err });
   }
-}
+};
 //this is Login page
 exports.Login = async (req, res) => {
   try {
@@ -37,7 +47,106 @@ exports.Login = async (req, res) => {
     res.status(500).json({ msg: "Server error", error: err });
   }
 }
+exports.getProfile = async (req, res) => {
+  try {
+    const user = req.user; // populated by protect middleware
 
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    // Build the full URL for profile picture if it exists
+    const profilePictureUrl = user.profilePicture
+      ? `${req.protocol}://${req.get("host")}/api/auth/profile/image/${user.profilePicture}`
+      : null;
+
+    res.status(200).json({
+      username: user.username,
+      email: user.email,
+      description: user.description,
+      profilePicture: profilePictureUrl,
+      followers: user.followers.length,
+      following: user.following.length,
+      preferences: user.preferences,
+      totalStoriesWritten: user.totalStoriesWritten,
+      totalLikes: user.totalLikes,
+      totalStoriesBranched: user.totalStoriesBranched,
+      contact: user.contact
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error", error: err.message });
+  }
+};
+
+exports.updateProfile = async (req, res) => {
+  try {
+    // Find the logged-in user
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const { username, email, description, contact } = req.body;
+
+    // Update username if provided
+    if (username) user.username = username;
+
+    // Update email if provided & check uniqueness
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ msg: "Email already in use" });
+      }
+      user.email = email;
+    }
+
+    // Update description
+    if (description) user.description = description;
+
+    // Update contact (gmail, facebook, instagram)
+    if (contact) {
+      user.contact = {
+        ...user.contact, // keep existing fields if not updated
+        ...contact
+      };
+    }
+
+    // Handle profile picture upload via GridFS
+    if (req.file) {
+      const gridfsBucket = getGridFS();
+      const uploadStream = gridfsBucket.openUploadStream(
+        Date.now() + "-" + req.file.originalname,
+        { contentType: req.file.mimetype }
+      );
+
+      uploadStream.end(req.file.buffer);
+
+      // Handle upload errors
+      uploadStream.on("error", (err) => {
+        console.error("GridFS upload error:", err);
+        return res.status(500).json({ msg: "Image upload failed", error: err.message });
+      });
+
+      // When upload finishes
+      uploadStream.on("finish", async () => {
+        user.profilePicture = uploadStream.id; // store valid ObjectId
+        await user.save();
+
+        // Build full URL for frontend
+        const profilePictureUrl = `${req.protocol}://${req.get("host")}/api/auth/profile/image/${uploadStream.id}`;
+
+        // Send response with updated user and image URL
+        res.status(200).json({ msg: "Profile updated!", user: { ...user.toObject(), profilePicture: profilePictureUrl } });
+      });
+
+      return; // prevent sending response before upload finishes
+    }
+
+    // Save updates if no file uploaded
+    await user.save();
+    res.status(200).json({ msg: "Profile updated!", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error", error: err.message });
+  }
+};
 // Save user preferences
 exports.savePreferences = async (req, res) => {
   try {
@@ -80,6 +189,25 @@ exports.getPreferences = async (req, res) => {
   }
 };
 
+exports.getProfilePicture = async (req, res) => {
+  try {
+    const gridfsBucket = getGridFS();
+    const fileId = new mongoose.Types.ObjectId(req.params.id);
+
+    const downloadStream = gridfsBucket.openDownloadStream(fileId);
+
+    // Handle download errors
+    downloadStream.on("error", (err) => {
+      console.error("GridFS download error:", err);
+      res.status(404).json({ msg: "Image not found" });
+    });
+
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ msg: "Invalid image id" });
+  }
+};
 
 exports.Verify = async (req, res) => {
   try {
