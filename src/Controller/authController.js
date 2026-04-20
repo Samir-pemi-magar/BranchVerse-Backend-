@@ -49,11 +49,9 @@ exports.Login = async (req, res) => {
 }
 exports.getProfile = async (req, res) => {
   try {
-    const user = req.user; // populated by protect middleware
-
+    const user = await User.findById(req.user._id).select("-password");
     if (!user) return res.status(404).json({ msg: "User not found" });
 
-    // Build the full URL for profile picture if it exists
     const profilePictureUrl = user.profilePicture
       ? `${req.protocol}://${req.get("host")}/api/auth/profile/image/${user.profilePicture}`
       : null;
@@ -61,18 +59,44 @@ exports.getProfile = async (req, res) => {
     res.status(200).json({
       username: user.username,
       email: user.email,
+      id: user.id,
       description: user.description,
       profilePicture: profilePictureUrl,
-      followers: user.followers.length,
-      following: user.following.length,
+      followers: user.followers,
+      following: user.following,
       preferences: user.preferences,
-      totalStoriesWritten: user.totalStoriesWritten,
-      totalLikes: user.totalLikes,
-      totalStoriesBranched: user.totalStoriesBranched,
+      totalStoriesWritten: user.totalStoriesWritten,  // only this user's count
+      totalLikes: user.totalLikes,                    // only this user's count
+      totalStoriesBranched: user.totalStoriesBranched, // only this user's count
       contact: user.contact
     });
   } catch (err) {
-    console.error(err);
+    res.status(500).json({ msg: "Server error", error: err.message });
+  }
+};
+
+exports.getPublicProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select("-password");
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const profilePictureUrl = user.profilePicture
+      ? `${req.protocol}://${req.get("host")}/api/auth/profile/image/${user.profilePicture}`
+      : null;
+
+    res.status(200).json({
+      id: user.id,
+      username: user.username,
+      description: user.description,
+      profilePicture: profilePictureUrl,
+      followers: user.followers,
+      following: user.following,
+      totalStoriesWritten: user.totalStoriesWritten,
+      totalLikes: user.totalLikes,
+      totalStoriesBranched: user.totalStoriesBranched,
+      contact: user.contact,
+    });
+  } catch (err) {
     res.status(500).json({ msg: "Server error", error: err.message });
   }
 };

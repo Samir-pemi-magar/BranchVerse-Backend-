@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema({
         interests: { type: String, default: "" },
     },
 
-    description: { type: String, default:      "" },
+    description: { type: String, default: "" },
     profilePicture: { type: mongoose.Schema.Types.ObjectId, default: null },
 
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
@@ -31,6 +31,27 @@ const userSchema = new mongoose.Schema({
         achievement: { type: mongoose.Schema.Types.ObjectId, ref: "Achievement" },
         dateUnlocked: { type: Date, default: Date.now }
     }],
+    bookmarkedStories: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Story"
+        }
+    ],
+
+    bookmarkedChapters: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Chapter"
+        }
+    ],
+    notificationPreferences: {
+        newFollower: { type: Boolean, default: true },
+        newStoryFromFollowing: {
+            type: String,
+            enum: ["all", "none", "digest"],
+            default: "all",
+        },
+    },
     points: { type: Number, default: 0 }
 
 }, { timestamps: true });

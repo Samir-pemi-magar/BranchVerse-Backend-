@@ -7,6 +7,8 @@ const authRoutes = require("./src/Router/authRoutes");
 const storyRoutes = require("./src/Router/storyRoutes");
 const chapterRoutes = require("./src/Router/ChaptersRoutes");
 const achievementRoutes = require("./src/Router/achivementsRouter");
+const followRoutes = require("./src/Router/followRoutes");
+
 
 
 const app = express();
@@ -21,6 +23,7 @@ app.use(cors({
 
 connectDB();
 
+app.use("/api/follow", followRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/stories", storyRoutes);
 app.use("/api/chapters", chapterRoutes);

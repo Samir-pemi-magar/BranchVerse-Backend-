@@ -48,6 +48,11 @@ const storySchema = new mongoose.Schema({
 
 
     createdAt: { type: Date, default: Date.now },
+
+    disabled: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 module.exports = mongoose.model("Story", storySchema);

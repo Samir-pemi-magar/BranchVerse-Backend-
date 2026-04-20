@@ -20,5 +20,7 @@ router.put(
     AuthController.updateProfile
 );
 router.get("/profile/image/:id", AuthController.getProfilePicture);
+router.get("/profile/:userId", AuthController.getPublicProfile);
+
 
 module.exports = router;

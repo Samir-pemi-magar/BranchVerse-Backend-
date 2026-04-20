@@ -6,31 +6,41 @@ const router = express.Router();
 
 // Create chapter
 router.post("/", auth, chapterController.createChapter);
+
+// User branches
 router.get("/my-branches", auth, chapterController.getMyBranches);
 
-// Get main storyline chapters
-router.get("/:storyId/main", chapterController.getMainChapters);
+// Read chapter
+router.get("/read/:storyId/:chapterId", auth, chapterController.readChapter);
 
-// Read single chapter with metadata
-router.get("/read/:storyId/:chapterId", chapterController.readChapter);
-
-// Like a chapter
-router.post("/:chapterId/like", auth, chapterController.likeChapter);
-
-// Comment on a chapter
-router.post("/:chapterId/comment", auth, chapterController.commentChapter);
-
-// Get branches of a chapter
+// Branches
 router.get("/branches/:chapterId", chapterController.getBranches);
 
-// Get comments of a chapter
+// Comments
 router.get("/:chapterId/comments", chapterController.getComments);
-
+router.post("/:chapterId/comment", auth, chapterController.commentChapter);
 router.post("/:chapterId/comment/:commentId/reply", auth, chapterController.replyToComment);
 
-// Get all chapters in hierarchical structure (main + branches)
+// Like
+router.post("/:chapterId/like", auth, chapterController.likeChapter);
+
+// Hierarchy
 router.get("/story/:storyId/hierarchy", chapterController.getChaptersHierarchy);
 
+// Main storyline
+router.get("/:storyId/main", chapterController.getMainChapters);
 
+// Enable / Disable
+router.put("/:chapterId/disable", auth, chapterController.disableChapter);
+router.put("/:chapterId/enable", auth, chapterController.enableChapter);
+
+// ✅ NEW ROUTES
+router.put("/:chapterId", auth, chapterController.updateChapter);
+router.delete("/:chapterId", auth, chapterController.deleteChapter);
+
+// ── BOOKMARKS ─────────────────────────────
+router.post("/:chapterId/bookmark", auth, chapterController.toggleChapterBookmark);
+router.get("/bookmarks/chapters", auth, chapterController.getBookmarkedChapters);
+router.get("/user/:userId/branches", auth, chapterController.getBranchesByUser);
 
 module.exports = router;
