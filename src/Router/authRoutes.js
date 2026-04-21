@@ -21,6 +21,8 @@ router.put(
 );
 router.get("/profile/image/:id", AuthController.getProfilePicture);
 router.get("/profile/:userId", AuthController.getPublicProfile);
+router.post("/forgot-password", AuthController.ForgotPassword);
+router.post("/reset-password/:token", AuthController.ResetPassword);
 
 
 module.exports = router;

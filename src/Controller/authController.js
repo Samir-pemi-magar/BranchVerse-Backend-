@@ -6,6 +6,8 @@ const sendVerificationEmail = require("../Utils/VerificationMailer");
 const jwt = require("jsonwebtoken");
 const getGridFS = require("../config/Gridfs");
 const checkAchievements = require("../Utils/achivement");
+const crypto = require("crypto");
+const sendPasswordResetEmail = require("../Utils/ResetMailer");
 
 exports.Signup = async (req, res) => {
   try {
@@ -230,6 +232,62 @@ exports.getProfilePicture = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(400).json({ msg: "Invalid image id" });
+  }
+};
+
+exports.ForgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ msg: "Email is required" });
+
+    const user = await User.findOne({ email });
+    // Always return success to prevent email enumeration attacks
+    if (!user) return res.status(200).json({ msg: "If that email exists, a reset link has been sent" });
+
+    // Generate a secure random token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    user.passwordResetToken = resetTokenHash;
+    user.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+    await user.save();
+
+    await sendPasswordResetEmail(email, resetToken);
+
+    res.status(200).json({ msg: "If that email exists, a reset link has been sent" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error", error: err.message });
+  }
+};
+
+exports.ResetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) return res.status(400).json({ msg: "Password is required" });
+    if (password.length < 6) return res.status(400).json({ msg: "Password must be at least 6 characters" });
+
+    // Hash the incoming token to compare with stored hash
+    const resetTokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      passwordResetToken: resetTokenHash,
+      passwordResetExpires: { $gt: Date.now() },
+    });
+
+    if (!user) return res.status(400).json({ msg: "Invalid or expired reset token" });
+
+    user.password = await hashPassword(password);
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    res.status(200).json({ msg: "Password reset successful. You can now log in." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error", error: err.message });
   }
 };
 

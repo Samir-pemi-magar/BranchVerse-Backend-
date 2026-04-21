@@ -36,8 +36,13 @@ exports.createStory = async (req, res) => {
                 cover: uploadStream.id,
                 author: req.user._id,
             });
-            await User.findByIdAndUpdate(req.user._id, { $inc: { totalStoriesWritten: 1 } });
-            await checkAchievements(req.user._id);
+            const updatedUser = await User.findByIdAndUpdate(
+                req.user._id,
+                { $inc: { totalStoriesWritten: 1 } },
+                { new: true }
+            );
+
+            await checkAchievements(updatedUser._id);
 
             res.status(201).json({ msg: "Story created", storyId: story._id });
         });
@@ -392,8 +397,13 @@ exports.toggleLikeStory = async (req, res) => {
         } else {
             story.likes += 1;
             story.likedBy.push(userId);
-            await User.findByIdAndUpdate(story.author, { $inc: { totalLikes: 1 } });
-            await checkAchievements(story.author);
+            const updatedUser = await User.findByIdAndUpdate(
+                story.author,
+                { $inc: { totalLikes: 1 } },
+                { new: true }
+            );
+
+            await checkAchievements(updatedUser._id);
         }
 
         await story.save();
@@ -540,10 +550,13 @@ exports.deleteStory = async (req, res) => {
             });
         }
 
-        // BEFORE deleting story
         await Chapter.deleteMany({ storyId: story._id });
-
         await story.deleteOne();
+
+        // ✅ Decrement the counter
+        await User.findByIdAndUpdate(req.user._id, {
+            $inc: { totalStoriesWritten: -1 }
+        });
 
         res.json({ msg: "Story deleted successfully" });
     } catch (err) {
@@ -709,9 +722,9 @@ exports.getAllBookmarks = async (req, res) => {
 
 exports.getStoriesByUser = async (req, res) => {
     try {
-        const stories = await Story.find({ 
-            author: req.params.userId, 
-            disabled: { $ne: true } 
+        const stories = await Story.find({
+            author: req.params.userId,
+            disabled: { $ne: true }
         })
             .populate("author", "username")
             .sort({ createdAt: -1 });

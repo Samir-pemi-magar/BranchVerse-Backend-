@@ -27,6 +27,9 @@ const userSchema = new mongoose.Schema({
     totalLikes: { type: Number, default: 0 },
     totalStoriesBranched: { type: Number, default: 0 },
 
+    passwordResetToken: { type: String, default: null },
+    passwordResetExpires: { type: Date, default: null },
+
     achievements: [{
         achievement: { type: mongoose.Schema.Types.ObjectId, ref: "Achievement" },
         dateUnlocked: { type: Date, default: Date.now }
