@@ -43,7 +43,15 @@ exports.Login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ msg: "Invalid Password" });
     if (!user.verified) return res.status(400).json({ msg: "Please verify your email first" });
     const token = generateToken(user._id);
-    res.status(201).json({ msg: "Login Sucessful", token });
+    res.status(200).json({
+      msg: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email
+      }
+    });
   }
   catch (err) {
     res.status(500).json({ msg: "Server error", error: err });
@@ -74,6 +82,25 @@ exports.getProfile = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ msg: "Server error", error: err.message });
+  }
+};
+
+exports.searchUsers = async (req, res) => {
+  try {
+    const q = req.query.q?.trim();
+
+    if (!q || q.length > 30) return res.json([]);
+
+    const users = await User.find({
+      username: { $regex: q, $options: "i" },
+      _id: { $ne: req.user._id },
+    })
+      .select("_id username profilePicture")
+      .limit(10);
+
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ msg: "Search failed", error: err.message });
   }
 };
 

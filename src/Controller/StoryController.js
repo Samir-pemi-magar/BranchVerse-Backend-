@@ -27,15 +27,14 @@ exports.createStory = async (req, res) => {
         uploadStream.on("finish", async () => {
             const story = await Story.create({
                 title: req.body.title,
-                tags: Array.isArray(req.body.tags)
-                    ? req.body.tags
-                    : [req.body.tags],
+                tags: Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags],
                 genre: Array.isArray(req.body.genre) ? req.body.genre : [req.body.genre],
                 description: req.body.description,
                 branchAllowed: req.body.branchAllowed === "true",
                 cover: uploadStream.id,
                 author: req.user._id,
             });
+
             const updatedUser = await User.findByIdAndUpdate(
                 req.user._id,
                 { $inc: { totalStoriesWritten: 1 } },
@@ -43,6 +42,29 @@ exports.createStory = async (req, res) => {
             );
 
             await checkAchievements(updatedUser._id);
+
+            // ✅ Notify followers about new story
+            try {
+                const authorWithFollowers = await User.findById(req.user._id)
+                    .populate("followers", "email username notificationPreferences");
+
+                for (const follower of authorWithFollowers.followers) {
+                    const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                    if (pref === "none") continue;
+
+                    await sendFollowNotificationEmail({
+                        toEmail: follower.email,
+                        toUsername: follower.username,
+                        authorUsername: req.user.username || updatedUser.username,
+                        storyTitle: story.title,
+                        storyId: story._id,
+                        type: "new_story",
+                    });
+                }
+            } catch (notifErr) {
+                // Don't fail story creation if notification fails
+                console.error("Failed to send story notifications:", notifErr.message);
+            }
 
             res.status(201).json({ msg: "Story created", storyId: story._id });
         });
@@ -110,14 +132,18 @@ exports.topWritersThisWeek = async (req, res) => {
             { $limit: 3 }
         ]);
 
-        const populated = await User.populate(writers, { path: "_id", select: "username" });
+        // AFTER
+        const populated = await User.populate(writers, { path: "_id", select: "username profilePicture" });
 
         if (populated.length < 2) return res.json([]);
 
         res.json(populated.map(w => ({
             writer: w._id.username,
             totalScore: w.totalScore,
-            storiesCount: w.storiesCount
+            storiesCount: w.storiesCount,
+            profilePicture: w._id.profilePicture
+                ? `${req.protocol}://${req.get("host")}/api/auth/profile/image/${w._id.profilePicture}`
+                : null
         })));
     } catch (err) {
         console.error(err);
@@ -670,7 +696,7 @@ exports.getBookmarkedStories = async (req, res) => {
             .populate({
                 path: "bookmarkedStories",
                 match: { disabled: { $ne: true } },
-                select: "title cover author genre createdAt",
+                select: "title cover author genre createdAt branchesCount",
                 populate: {
                     path: "author",
                     select: "username"
@@ -689,7 +715,7 @@ exports.getAllBookmarks = async (req, res) => {
             .populate({
                 path: "bookmarkedStories",
                 match: { disabled: { $ne: true } },
-                select: "title cover author tags genre createdAt",  // ✅ add tags
+                select: "title cover author tags genre createdAt branchesCount",  // ✅ add tags
                 populate: { path: "author", select: "username" }
             })
             .populate({

@@ -49,11 +49,34 @@ exports.createChapter = async (req, res) => {
             disabledByStory: false
         });
 
-        // 🔹 Increment story branch count if this chapter is a branch
         if (parentChapterId) {
             await Story.findByIdAndUpdate(storyId, { $inc: { branchesCount: 1 } });
             await User.findByIdAndUpdate(req.user._id, { $inc: { totalStoriesBranched: 1 } });
             await checkAchievements(req.user._id);
+
+            // ✅ Notify story author's followers about new branch
+            try {
+                const sendFollowNotificationEmail = require("../Utils/FollowMailer");
+                const fullStory = await Story.findById(storyId).populate("author", "username");
+                const storyAuthor = await User.findById(fullStory.author._id)
+                    .populate("followers", "email username notificationPreferences");
+
+                for (const follower of storyAuthor.followers) {
+                    const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                    if (pref === "none") continue;
+
+                    await sendFollowNotificationEmail({
+                        toEmail: follower.email,
+                        toUsername: follower.username,
+                        authorUsername: req.user.username,
+                        storyTitle: `a new branch on "${fullStory.title}"`,
+                        storyId: storyId,
+                        type: "new_story",
+                    });
+                }
+            } catch (notifErr) {
+                console.error("Failed to send branch notifications:", notifErr.message);
+            }
         }
 
         res.status(201).json({ chapterId: chapter._id, message: "Chapter created successfully" });
