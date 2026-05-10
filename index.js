@@ -13,6 +13,7 @@ const achievementRoutes = require("./src/Router/achivementsRouter");
 const followRoutes = require("./src/Router/followRoutes");
 const chatRoutes = require("./src/Router/ChatRoutes");
 const messageRoutes = require("./src/Router/Messageroutes");
+const adminRoutes = require("./src/Router/adminRoutes"); // <-- add this
 
 // Socket
 const initSocket = require("./socket");
@@ -40,6 +41,7 @@ app.use("/api/achievements", achievementRoutes);
 app.use("/api/follow", followRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/message", messageRoutes);
+app.use("/api/admin", adminRoutes); // <-- add this
 
 // Server + Socket
 const server = http.createServer(app);

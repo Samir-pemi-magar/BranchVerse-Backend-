@@ -55,6 +55,12 @@ const userSchema = new mongoose.Schema({
             default: "all",
         },
     },
+    role: {
+        type: String,
+        enum: ["user", "admin"],
+        default: "user",
+    },
+    banned: { type: Boolean, default: false },
     points: { type: Number, default: 0 }
 
 }, { timestamps: true });
