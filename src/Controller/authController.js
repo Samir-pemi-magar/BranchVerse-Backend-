@@ -42,6 +42,7 @@ exports.Login = async (req, res) => {
     const isMatch = await comparePassword(password, user.password);
     if (!isMatch) return res.status(400).json({ msg: "Invalid Password" });
     if (!user.verified) return res.status(400).json({ msg: "Please verify your email first" });
+    if (user.banned) return res.status(403).json({ msg: "Your account has been banned. Please contact support." });
     const token = generateToken(user._id);
     res.status(200).json({
       msg: "Login successful",
@@ -70,6 +71,7 @@ exports.getProfile = async (req, res) => {
       username: user.username,
       email: user.email,
       id: user.id,
+      id: user._id,
       description: user.description,
       profilePicture: profilePictureUrl,
       followers: user.followers,

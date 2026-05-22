@@ -10,6 +10,38 @@ const checkAchievements = require("../Utils/achivement");
 /**
  * CREATE STORY
  */
+// ✅ Add this helper near the top of StoryController.js
+async function attachStoryViews(stories) {
+    if (!stories.length) return stories;
+
+    const storyIds = stories.map(s => s._id);
+
+    const viewTotals = await Chapter.aggregate([
+        {
+            $match: {
+                storyId: { $in: storyIds },
+                isMainBranch: true,
+                disabled: { $ne: true }
+            }
+        },
+        {
+            $group: {
+                _id: "$storyId",
+                total: { $sum: "$views" }
+            }
+        }
+    ]);
+
+    const viewMap = {};
+    viewTotals.forEach(v => { viewMap[v._id.toString()] = v.total; });
+
+    return stories.map(s => {
+        const obj = typeof s.toObject === "function" ? s.toObject() : { ...s };
+        obj.views = viewMap[obj._id.toString()] ?? 0;
+        return obj;
+    });
+}
+
 exports.createStory = async (req, res) => {
     try {
         if (!req.file) {
@@ -96,22 +128,41 @@ exports.popularThisWeekStories = async (req, res) => {
             { $limit: 7 }
         ]);
 
-        stories = await Story.populate(stories, { path: "author", select: "username" });
+        // ✅ Fallback: if not enough recent stories, get all-time
+        if (stories.length < 3) {
+            stories = await Story.aggregate([
+                { $match: { disabled: { $ne: true } } },
+                {
+                    $addFields: {
+                        trendingScore: {
+                            $add: [
+                                { $multiply: ["$views", 0.4] },
+                                { $multiply: ["$likes", 0.5] },
+                                { $multiply: ["$branchesCount", 0.1] }
+                            ]
+                        }
+                    }
+                },
+                { $sort: { trendingScore: -1 } },
+                { $limit: 7 }
+            ]);
+        }
 
+        stories = await Story.populate(stories, { path: "author", select: "username" });
+        stories = await attachStoryViews(stories);
         res.json(stories);
     } catch (err) {
         console.error(err);
         res.status(500).json({ msg: err.message });
     }
 };
-
 // ==================== TOP WRITERS THIS WEEK (3 MAX) ====================
 exports.topWritersThisWeek = async (req, res) => {
     try {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const writers = await Story.aggregate([
+        let writers = await Story.aggregate([
             { $match: { createdAt: { $gte: sevenDaysAgo }, disabled: { $ne: true } } },
             {
                 $group: {
@@ -132,11 +183,33 @@ exports.topWritersThisWeek = async (req, res) => {
             { $limit: 3 }
         ]);
 
-        // AFTER
+        // ✅ Fallback: if no writers this week, get all-time top writers
+        if (writers.length === 0) {
+            writers = await Story.aggregate([
+                { $match: { disabled: { $ne: true } } },
+                {
+                    $group: {
+                        _id: "$author",
+                        totalScore: {
+                            $sum: {
+                                $add: [
+                                    { $multiply: ["$views", 0.4] },
+                                    { $multiply: ["$likes", 0.5] },
+                                    { $multiply: ["$branchesCount", 0.1] }
+                                ]
+                            }
+                        },
+                        storiesCount: { $sum: 1 }
+                    }
+                },
+                { $sort: { totalScore: -1 } },
+                { $limit: 3 }
+            ]);
+        }
+
         const populated = await User.populate(writers, { path: "_id", select: "username profilePicture" });
 
-        if (populated.length < 2) return res.json([]);
-
+        // ✅ Removed the length < 2 check
         res.json(populated.map(w => ({
             writer: w._id.username,
             totalScore: w.totalScore,
@@ -172,7 +245,7 @@ exports.topStoriesOverall = async (req, res) => {
         ]);
 
         stories = await Story.populate(stories, { path: "author", select: "username" });
-
+        stories = await attachStoryViews(stories);
         res.json(stories);
     } catch (err) {
         console.error(err);
@@ -186,13 +259,13 @@ exports.topStoriesOverall = async (req, res) => {
  */
 exports.getAllStories = async (req, res) => {
     try {
-        const stories = await Story.find({ disabled: { $ne: true } })
+        let stories = await Story.find({ disabled: { $ne: true } })
             .populate("author", "_id username avatar")
             .sort({ createdAt: -1 });
 
-        // Include current user ID for frontend convenience
-        const currentUserId = req.user?._id;
+        stories = await attachStoryViews(stories);  // ✅
 
+        const currentUserId = req.user?._id;
         res.json({ currentUserId, stories });
     } catch (err) {
         res.status(500).json({ msg: err.message });
@@ -207,22 +280,14 @@ exports.getFilteredStories = async (req, res) => {
     try {
         const { tags, genre } = req.query;
         let filter = { disabled: { $ne: true } };
+        if (tags) filter.tags = { $in: tags.split(",") };
+        if (genre) filter.genre = { $in: genre.split(",") };
 
-        if (tags) {
-            const tagsArray = tags.split(",");
-            filter.tags = { $in: tagsArray };
-        }
-
-        if (genre) {
-            const genresArray = genre.split(",");
-            filter.genre = { $in: genresArray };
-        }
-
-        const stories = await Story.find(filter)
-            // Explicitly selecting _id, username, and avatar
+        let stories = await Story.find(filter)
             .populate("author", "_id username avatar")
             .sort({ createdAt: -1 });
 
+        stories = await attachStoryViews(stories);  // ✅
         res.json(stories);
     } catch (err) {
         res.status(500).json({ msg: err.message });
@@ -248,12 +313,10 @@ exports.getStoryById = async (req, res) => {
                 isMainBranch: false
             });
 
-            // Disabled + no branches → send nothing
             if (branchCount === 0) {
                 return res.status(403).json({ msg: "This story is unavailable." });
             }
 
-            // Disabled + has branches → minimal payload so branch readers have context
             return res.status(403).json({
                 msg: "This story has been disabled by the author.",
                 disabled: true,
@@ -270,10 +333,18 @@ exports.getStoryById = async (req, res) => {
             });
         }
 
-        story.views += 1;
-        await story.save();
+        // ✅ Compute views as sum of all main branch chapter views
+        const viewsAgg = await Chapter.aggregate([
+            { $match: { storyId: story._id, isMainBranch: true, disabled: { $ne: true } } },
+            { $group: { _id: null, total: { $sum: "$views" } } }
+        ]);
+        const totalViews = viewsAgg[0]?.total ?? 0;
 
-        res.json(story);
+        const storyObj = story.toObject();
+        const userId = req.user?._id?.toString();
+        const liked = userId ? story.likedBy.some(id => id.toString() === userId) : false;
+
+        res.json({ ...storyObj, views: totalViews, liked });
     } catch (err) {
         res.status(500).json({ msg: err.message });
     }
@@ -297,29 +368,27 @@ exports.getCover = async (req, res) => {
  */
 exports.getTrendingStories = async (req, res) => {
     try {
-        const stories = await Story.aggregate([
-            { $match: { disabled: { $ne: true } } },
-            {
-                $addFields: {
-                    trendingScore: {
-                        $add: [
-                            { $multiply: ["$views", 0.4] },
-                            { $multiply: ["$likes", 0.5] },
-                            { $multiply: ["$branchesCount", 0.1] }
-                        ]
-                    }
-                }
-            },
-            { $sort: { trendingScore: -1 } },
-            { $limit: 10 }
-        ]);
+        // Get all active stories first
+        let stories = await Story.find({ disabled: { $ne: true } })
+            .populate("author", "username")
+            .lean();
+
+        stories = await attachStoryViews(stories);  // ✅
+
+        // Re-compute trending score with real views and sort
+        stories = stories
+            .map(s => ({
+                ...s,
+                trendingScore: (s.views * 0.4) + (s.likes * 0.5) + (s.branchesCount * 0.1)
+            }))
+            .sort((a, b) => b.trendingScore - a.trendingScore)
+            .slice(0, 10);
 
         res.json(stories);
     } catch (err) {
         res.status(500).json({ msg: err.message });
     }
 };
-
 /**
  * RECOMMENDED STORIES (USING preferences.genres)
  */
@@ -327,8 +396,9 @@ exports.getRecommendedStories = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
 
+        // Keep currentUserId present even on empty arrays
         if (!user || !user.preferences || !user.preferences.genres || user.preferences.genres.length === 0) {
-            return res.json([]);
+            return res.json({ currentUserId: req.user?._id, stories: [] });
         }
 
         const stories = await Story.find({
@@ -339,7 +409,8 @@ exports.getRecommendedStories = async (req, res) => {
             .sort({ createdAt: -1 })
             .limit(20);
 
-        res.json(stories);
+        // ✅ Wrap it in an object matching your frontend structure
+        res.json({ currentUserId: req.user?._id, stories });
     } catch (err) {
         res.status(500).json({ msg: err.message });
     }

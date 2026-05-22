@@ -20,7 +20,7 @@ router.get("/feed/top-stories", storyController.topStoriesOverall);
 // ── Other static routes (MUST be before /:id) ────────────
 router.get("/cover/:id", storyController.getCover);
 router.get("/my-stories", auth, storyController.getMyStories);
-router.get("/", auth, storyController.getAllStories);
+router.get("/", storyController.getAllStories);
 
 // ── BOOKMARKS ─────────────────────────────
 router.post("/:storyId/bookmark", auth, storyController.toggleStoryBookmark);

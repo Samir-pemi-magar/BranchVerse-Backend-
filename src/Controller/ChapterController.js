@@ -136,7 +136,7 @@ exports.getMainChapters = async (req, res) => {
                 isMainBranch: true,
                 disabled: { $ne: true }
             },
-            { title: 1, chapterNumber: 1 }
+            { title: 1, chapterNumber: 1, likes: 1 }  // ← add likes
         ).sort({ chapterNumber: 1 });
 
         res.json(chapters);
