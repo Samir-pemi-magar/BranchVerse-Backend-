@@ -64,7 +64,7 @@ exports.getProfile = async (req, res) => {
     if (!user) return res.status(404).json({ msg: "User not found" });
 
     const profilePictureUrl = user.profilePicture
-      ? `${req.protocol}://${req.get("host")}/api/auth/profile/image/${user.profilePicture}`
+      ? `https://${req.get("host")}/api/auth/profile/image/${user.profilePicture}`
       : null;
 
     res.status(200).json({
