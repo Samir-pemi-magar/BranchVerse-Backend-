@@ -20,7 +20,7 @@ const {
 const protectAdmin = require("../middleware/protectAdmin");
 
 // Import your support controller here
-const { getMessages, markRead } = require("../Controller/supportController"); // Update path to your file name
+const { getMessages, markRead } = require("../Controller/SupportController"); // Update path to your file name
 
 // ── Auth (public) ──────────────────────────────────────────────────────────
 router.post("/signup", AdminSignup);
