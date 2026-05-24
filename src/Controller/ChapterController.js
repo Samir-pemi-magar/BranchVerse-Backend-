@@ -150,7 +150,9 @@ exports.readChapter = async (req, res) => {
     try {
         const { storyId, chapterId } = req.params;
 
-        const chapter = await Chapter.findOne({ _id: chapterId, storyId });
+        const chapter = await Chapter.findOne({ _id: chapterId, storyId })
+            .populate("author", "username");  // ← ADD THIS
+
         if (!chapter) return res.status(404).json({ error: "Chapter not found" });
 
         if (chapter.disabled) {
@@ -161,10 +163,8 @@ exports.readChapter = async (req, res) => {
         await chapter.save();
 
         const branchCount = await Chapter.countDocuments({ parentChapterId: chapter._id });
-
         const story = await Story.findById(storyId).select("cover tags");
         const currentUserId = req.user?._id;
-
 
         res.json({
             ...chapter.toObject(),
@@ -178,7 +178,6 @@ exports.readChapter = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 };
-
 // ==================== LIKE / UNLIKE CHAPTER ====================
 exports.likeChapter = async (req, res) => {
     try {
