@@ -396,26 +396,28 @@ exports.getRecommendedStories = async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
 
-        // Keep currentUserId present even on empty arrays
         if (!user || !user.preferences || !user.preferences.genres || user.preferences.genres.length === 0) {
             return res.json({ currentUserId: req.user?._id, stories: [] });
         }
 
-        const stories = await Story.find({
+        let stories = await Story.find({
             genre: { $in: user.preferences.genres },
             disabled: { $ne: true }
         })
             .populate("author", "username")
             .sort({ createdAt: -1 })
-            .limit(20);
+            .limit(30); // fetch a larger pool first, then shuffle down to 6
 
-        // ✅ Wrap it in an object matching your frontend structure
+        // Shuffle and slice to 6
+        stories = stories
+            .sort(() => Math.random() - 0.5)
+            .slice(0, 6);
+
         res.json({ currentUserId: req.user?._id, stories });
     } catch (err) {
         res.status(500).json({ msg: err.message });
     }
 };
-
 /**
  * PERSONALIZED FEED (TRENDING + PREFERENCE)
  */
