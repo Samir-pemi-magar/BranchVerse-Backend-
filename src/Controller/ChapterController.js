@@ -12,6 +12,17 @@ exports.createChapter = async (req, res) => {
         if (!story) return res.status(404).json({ error: "Story not found" });
         if (story.disabled) return res.status(403).json({ error: "Cannot add chapter to a disabled story" });
 
+        // ✅ Authorization checks
+        if (!parentChapterId) {
+            if (story.author.toString() !== req.user._id.toString()) {
+                return res.status(403).json({ error: "Not authorized to add chapters to this story" });
+            }
+        } else {
+            if (!story.branchAllowed) {
+                return res.status(403).json({ error: "Branching is not allowed for this story" });
+            }
+        }
+
         let tags = [];
         let genre = [];
 
@@ -45,7 +56,7 @@ exports.createChapter = async (req, res) => {
             author: req.user._id,
             tags,
             genre,
-            disabled: false, // ✅ Ensure new chapters are active by default
+            disabled: false,
             disabledByStory: false
         });
 
