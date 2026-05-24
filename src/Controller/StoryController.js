@@ -5,6 +5,7 @@ const User = require("../Models/Users");
 const Chapter = require("../Models/Chapter");
 const getGridFS = require("../config/Gridfs");
 const checkAchievements = require("../Utils/achivement");
+const cloudinary = require("../config/cloudinary");
 
 
 /**
@@ -48,63 +49,62 @@ exports.createStory = async (req, res) => {
             return res.status(400).json({ msg: "Cover image is required" });
         }
 
-        const gridfsBucket = getGridFS();
-        const uploadStream = gridfsBucket.openUploadStream(
-            Date.now() + "-" + req.file.originalname,
-            { contentType: req.file.mimetype }
+        // Upload to Cloudinary
+        const uploadResult = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                { folder: "branchverse/covers" },
+                (error, result) => {
+                    if (error) reject(error);
+                    else resolve(result);
+                }
+            );
+            stream.end(req.file.buffer);
+        });
+
+        const story = await Story.create({
+            title: req.body.title,
+            tags: Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags],
+            genre: Array.isArray(req.body.genre) ? req.body.genre : [req.body.genre],
+            description: req.body.description,
+            branchAllowed: req.body.branchAllowed === "true",
+            cover: uploadResult.secure_url, // ← store URL instead of GridFS id
+            author: req.user._id,
+        });
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            { $inc: { totalStoriesWritten: 1 } },
+            { new: true }
         );
 
-        uploadStream.end(req.file.buffer);
+        await checkAchievements(updatedUser._id);
 
-        uploadStream.on("finish", async () => {
-            const story = await Story.create({
-                title: req.body.title,
-                tags: Array.isArray(req.body.tags) ? req.body.tags : [req.body.tags],
-                genre: Array.isArray(req.body.genre) ? req.body.genre : [req.body.genre],
-                description: req.body.description,
-                branchAllowed: req.body.branchAllowed === "true",
-                cover: uploadStream.id,
-                author: req.user._id,
-            });
+        // Notify followers
+        try {
+            const authorWithFollowers = await User.findById(req.user._id)
+                .populate("followers", "email username notificationPreferences");
 
-            const updatedUser = await User.findByIdAndUpdate(
-                req.user._id,
-                { $inc: { totalStoriesWritten: 1 } },
-                { new: true }
-            );
-
-            await checkAchievements(updatedUser._id);
-
-            // ✅ Notify followers about new story
-            try {
-                const authorWithFollowers = await User.findById(req.user._id)
-                    .populate("followers", "email username notificationPreferences");
-
-                for (const follower of authorWithFollowers.followers) {
-                    const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
-                    if (pref === "none") continue;
-
-                    await sendFollowNotificationEmail({
-                        toEmail: follower.email,
-                        toUsername: follower.username,
-                        authorUsername: req.user.username || updatedUser.username,
-                        storyTitle: story.title,
-                        storyId: story._id,
-                        type: "new_story",
-                    });
-                }
-            } catch (notifErr) {
-                // Don't fail story creation if notification fails
-                console.error("Failed to send story notifications:", notifErr.message);
+            for (const follower of authorWithFollowers.followers) {
+                const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                if (pref === "none") continue;
+                await sendFollowNotificationEmail({
+                    toEmail: follower.email,
+                    toUsername: follower.username,
+                    authorUsername: req.user.username || updatedUser.username,
+                    storyTitle: story.title,
+                    storyId: story._id,
+                    type: "new_story",
+                });
             }
+        } catch (notifErr) {
+            console.error("Failed to send story notifications:", notifErr.message);
+        }
 
-            res.status(201).json({ msg: "Story created", storyId: story._id });
-        });
+        res.status(201).json({ msg: "Story created", storyId: story._id });
     } catch (err) {
         res.status(500).json({ msg: "Server error", error: err.message });
     }
 };
-
 // ==================== POPULAR THIS WEEK STORIES (7) ====================
 exports.popularThisWeekStories = async (req, res) => {
     try {
