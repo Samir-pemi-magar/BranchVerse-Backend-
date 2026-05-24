@@ -24,17 +24,14 @@ router.get("/search", protect, AuthController.searchUsers);
 
 // Google OAuth
 router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-router.get(
-    "/google/callback",
-    passport.authenticate("google", { failureRedirect: "http://localhost:3000/auth/login?error=google_failed" }),
+passport.authenticate("google", { failureRedirect: `${process.env.FRONTEND_URL}/auth/login?error=google_failed` }),
     (req, res) => {
         if (req.user.banned) {
-            return res.redirect("http://localhost:3000/auth/login?error=banned");
+            return res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=banned`);
         }
         const token = generateToken(req.user._id);
-        res.redirect(`http://localhost:3000/auth/success?token=${token}&userId=${req.user._id}`);
+        res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}&userId=${req.user._id}`);
     }
-);
 // In your public routes (no auth middleware):
 router.post("/support", SupportController.submitMessage);
 
