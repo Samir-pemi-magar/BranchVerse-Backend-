@@ -22,9 +22,11 @@ router.post("/forgot-password", AuthController.ForgotPassword);
 router.post("/reset-password/:token", AuthController.ResetPassword);
 router.get("/search", protect, AuthController.searchUsers);
 
-// Google OAuth
 router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-passport.authenticate("google", { failureRedirect: `${process.env.FRONTEND_URL}/auth/login?error=google_failed` }),
+
+router.get(
+    "/google/callback",
+    passport.authenticate("google", { failureRedirect: `${process.env.FRONTEND_URL}/auth/login?error=google_failed` }),
     (req, res) => {
         if (req.user.banned) {
             return res.redirect(`${process.env.FRONTEND_URL}/auth/login?error=banned`);
@@ -32,6 +34,7 @@ passport.authenticate("google", { failureRedirect: `${process.env.FRONTEND_URL}/
         const token = generateToken(req.user._id);
         res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}&userId=${req.user._id}`);
     }
+);
 // In your public routes (no auth middleware):
 router.post("/support", SupportController.submitMessage);
 
