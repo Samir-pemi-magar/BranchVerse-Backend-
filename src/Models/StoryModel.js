@@ -15,10 +15,7 @@ const storySchema = new mongoose.Schema({
 
     description: String,
 
-    cover: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-    },
+    cover: { type: String },
 
     author: {
         type: mongoose.Schema.Types.ObjectId,
