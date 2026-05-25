@@ -378,7 +378,7 @@ exports.Verify = async (req, res) => {
         <div class="container">
           <h1>✔ Email Verified!</h1>
           <p>Thank you for verifying your email. You can now log in to your account.</p>
-          <a href="http://localhost:3000/auth/login">Go to Login</a>
+          <a href="${process.env.FRONTEND_URL}/auth/login">Go to Login</a>
         </div>
       </body>
       </html>

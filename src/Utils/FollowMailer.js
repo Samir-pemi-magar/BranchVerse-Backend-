@@ -1,12 +1,5 @@
-const nodemailer = require("nodemailer");
-
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
+const sgMail = require("@sendgrid/mail");
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 /**
  * Unified follow/story notification mailer.
@@ -21,16 +14,16 @@ const transporter = nodemailer.createTransport({
  * @param {string}  opts.type              – "new_follower" | "new_story"
  */
 async function sendFollowNotificationEmail(opts) {
-    const { toEmail, toUsername, type } = opts;
+  const { toEmail, toUsername, type } = opts;
 
-    let subject, bodyHtml;
+  let subject, bodyHtml;
 
-    // ── NEW FOLLOWER ──────────────────────────────────────────────────────────
-    if (type === "new_follower") {
-        const { followerUsername } = opts;
-        subject = `${followerUsername} started following you on BranchVerse!`;
+  // ── NEW FOLLOWER ──────────────────────────────────────────────────────────
+  if (type === "new_follower") {
+    const { followerUsername } = opts;
+    subject = `${followerUsername} started following you on BranchVerse!`;
 
-        bodyHtml = `
+    bodyHtml = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
         <h2 style="color:#10B981;margin-bottom:8px;">🎉 New Follower!</h2>
         <p style="font-size:16px;color:#374151;">Hi <strong>${toUsername}</strong>,</p>
@@ -50,15 +43,15 @@ async function sendFollowNotificationEmail(opts) {
           <a href="${process.env.FRONTEND_URL}/settings/notifications" style="color:#6B7280;">Manage preferences</a>
         </p>
       </div>`;
-    }
+  }
 
-    // ── NEW STORY FROM SOMEONE YOU FOLLOW ─────────────────────────────────────
-    else if (type === "new_story") {
-        const { authorUsername, storyTitle, storyId } = opts;
-        subject = `${authorUsername} just published a new story on BranchVerse!`;
-        const storyUrl = `${process.env.FRONTEND_URL}/story/${storyId}`;
+  // ── NEW STORY FROM SOMEONE YOU FOLLOW ─────────────────────────────────────
+  else if (type === "new_story") {
+    const { authorUsername, storyTitle, storyId } = opts;
+    subject = `${authorUsername} just published a new story on BranchVerse!`;
+    const storyUrl = `${process.env.FRONTEND_URL}/story/${storyId}`;
 
-        bodyHtml = `
+    bodyHtml = `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
         <h2 style="color:#10B981;margin-bottom:8px;">📖 New Story Alert</h2>
         <p style="font-size:16px;color:#374151;">Hi <strong>${toUsername}</strong>,</p>
@@ -82,18 +75,18 @@ async function sendFollowNotificationEmail(opts) {
           <a href="${process.env.FRONTEND_URL}/settings/notifications" style="color:#6B7280;">Manage preferences</a>
         </p>
       </div>`;
-    } else {
-        throw new Error(`Unknown notification type: ${type}`);
-    }
+  } else {
+    throw new Error(`Unknown notification type: ${type}`);
+  }
 
-    await transporter.sendMail({
-        from: `"BranchVerse" <${process.env.EMAIL_USER}>`,
-        to: toEmail,
-        subject,
-        html: bodyHtml,
-    });
+  await sgMail.send({
+    from: "samirpemimagar@gmail.com",
+    to: toEmail,
+    subject,
+    html: bodyHtml,
+  });
 
-    console.log(`[Mailer] ${type} email sent to ${toEmail}`);
+  console.log(`[Mailer] ${type} email sent to ${toEmail}`);
 }
 
 module.exports = sendFollowNotificationEmail;
