@@ -23,6 +23,7 @@ const chapterSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    isDraft: { type: Boolean, default: false },
 
     isMainBranch: {
         type: Boolean,

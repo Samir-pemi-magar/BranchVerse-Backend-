@@ -7,13 +7,16 @@ const router = express.Router();
 // Create chapter
 router.post("/", auth, chapterController.createChapter);
 
-// User branches
+// ── Named/static routes FIRST (before any /:chapterId wildcard) ──
 router.get("/my-branches", auth, chapterController.getMyBranches);
+router.get("/my-drafts", auth, chapterController.getMyDrafts);               // ✅ new
+router.get("/bookmarks/chapters", auth, chapterController.getBookmarkedChapters);
+router.get("/user/:userId/branches", auth, chapterController.getBranchesByUser);
 
-// Read chapter
+// Story-scoped
+router.get("/story/:storyId/hierarchy", chapterController.getChaptersHierarchy);
+router.get("/:storyId/main", chapterController.getMainChapters);
 router.get("/read/:storyId/:chapterId", auth, chapterController.readChapter);
-
-// Branches
 router.get("/branches/:chapterId", chapterController.getBranches);
 
 // Comments
@@ -21,26 +24,19 @@ router.get("/:chapterId/comments", chapterController.getComments);
 router.post("/:chapterId/comment", auth, chapterController.commentChapter);
 router.post("/:chapterId/comment/:commentId/reply", auth, chapterController.replyToComment);
 
-// Like
+// Like & bookmark
 router.post("/:chapterId/like", auth, chapterController.likeChapter);
-
-// Hierarchy
-router.get("/story/:storyId/hierarchy", chapterController.getChaptersHierarchy);
-
-// Main storyline
-router.get("/:storyId/main", chapterController.getMainChapters);
+router.post("/:chapterId/bookmark", auth, chapterController.toggleChapterBookmark);
 
 // Enable / Disable
 router.put("/:chapterId/disable", auth, chapterController.disableChapter);
 router.put("/:chapterId/enable", auth, chapterController.enableChapter);
 
-// ✅ NEW ROUTES
+// Publish draft
+router.patch("/:chapterId/publish", auth, chapterController.publishDraft);   // ✅ new
+
+// CRUD
 router.put("/:chapterId", auth, chapterController.updateChapter);
 router.delete("/:chapterId", auth, chapterController.deleteChapter);
-
-// ── BOOKMARKS ─────────────────────────────
-router.post("/:chapterId/bookmark", auth, chapterController.toggleChapterBookmark);
-router.get("/bookmarks/chapters", auth, chapterController.getBookmarkedChapters);
-router.get("/user/:userId/branches", auth, chapterController.getBranchesByUser);
 
 module.exports = router;
