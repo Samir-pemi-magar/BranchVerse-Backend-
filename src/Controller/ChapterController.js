@@ -1,7 +1,8 @@
 const Chapter = require("../Models/Chapter");
 const Story = require("../Models/StoryModel");
 const checkAchievements = require("../Utils/achivement");
-const User = require("../Models/Users")
+const User = require("../Models/Users");
+
 // ==================== CREATE CHAPTER ====================
 exports.createChapter = async (req, res) => {
     try {
@@ -56,7 +57,7 @@ exports.createChapter = async (req, res) => {
             isDraft: savingAsDraft
         });
 
-        // Only run side effects (branch count, achievements, notifications) for published chapters
+        // ── BRANCH: side effects + notification ──────────────────────────────
         if (!savingAsDraft && parentChapterId) {
             await Story.findByIdAndUpdate(storyId, { $inc: { branchesCount: 1 } });
             await User.findByIdAndUpdate(req.user._id, { $inc: { totalStoriesBranched: 1 } });
@@ -65,23 +66,64 @@ exports.createChapter = async (req, res) => {
             try {
                 const sendFollowNotificationEmail = require("../Utils/FollowMailer");
                 const fullStory = await Story.findById(storyId).populate("author", "username");
-                const storyAuthor = await User.findById(fullStory.author._id)
-                    .populate("followers", "email username notificationPreferences");
 
-                for (const follower of storyAuthor.followers) {
-                    const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
-                    if (pref === "none") continue;
-                    await sendFollowNotificationEmail({
-                        toEmail: follower.email,
-                        toUsername: follower.username,
-                        authorUsername: req.user.username,
-                        storyTitle: `a new branch on "${fullStory.title}"`,
-                        storyId: storyId,
-                        type: "new_story",
-                    });
+                if (fullStory && fullStory.author) {
+                    const authorId = fullStory.author._id ?? fullStory.author;
+                    const storyAuthor = await User.findById(authorId)
+                        .populate("followers", "email username notificationPreferences");
+                    const branchingUser = await User.findById(req.user._id).select("username");
+
+                    if (storyAuthor && storyAuthor.followers?.length) {
+                        for (const follower of storyAuthor.followers) {
+                            const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                            if (pref === "none") continue;
+                            await sendFollowNotificationEmail({
+                                toEmail: follower.email,
+                                toUsername: follower.username,
+                                authorUsername: branchingUser.username,
+                                storyTitle: `a new branch on "${fullStory.title}"`,
+                                storyId: storyId,
+                                type: "new_story",
+                            });
+                        }
+                    }
                 }
             } catch (notifErr) {
                 console.error("Failed to send branch notifications:", notifErr.message);
+                console.error(notifErr.stack);
+            }
+        }
+
+        // ── MAIN CHAPTER: notification ────────────────────────────────────────
+        if (!savingAsDraft && !parentChapterId) {
+            try {
+                const sendFollowNotificationEmail = require("../Utils/FollowMailer");
+                const fullStory = await Story.findById(storyId).populate("author", "username");
+
+                if (fullStory && fullStory.author) {
+                    const authorId = fullStory.author._id ?? fullStory.author;
+                    const storyAuthor = await User.findById(authorId)
+                        .populate("followers", "email username notificationPreferences");
+                    const writingUser = await User.findById(req.user._id).select("username");
+
+                    if (storyAuthor && storyAuthor.followers?.length) {
+                        for (const follower of storyAuthor.followers) {
+                            const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                            if (pref === "none") continue;
+                            await sendFollowNotificationEmail({
+                                toEmail: follower.email,
+                                toUsername: follower.username,
+                                authorUsername: writingUser.username,
+                                storyTitle: `a new chapter in "${fullStory.title}"`,
+                                storyId: storyId,
+                                type: "new_story",
+                            });
+                        }
+                    }
+                }
+            } catch (notifErr) {
+                console.error("Failed to send chapter notifications:", notifErr.message);
+                console.error(notifErr.stack);
             }
         }
 
@@ -90,11 +132,14 @@ exports.createChapter = async (req, res) => {
             message: savingAsDraft ? "Draft saved" : "Chapter created successfully",
             isDraft: savingAsDraft
         });
+
     } catch (err) {
         console.error(err);
         res.status(400).json({ error: err.message });
     }
 };
+
+// ==================== GET MY DRAFTS ====================
 exports.getMyDrafts = async (req, res) => {
     try {
         const drafts = await Chapter.find({
@@ -109,14 +154,14 @@ exports.getMyDrafts = async (req, res) => {
             })
             .sort({ updatedAt: -1 });
 
-        // Filter out drafts whose parent story is disabled
         const activeDrafts = drafts.filter(d => d.storyId && !d.storyId.disabled);
-
         res.json(activeDrafts);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
+// ==================== PUBLISH DRAFT ====================
 exports.publishDraft = async (req, res) => {
     try {
         const { chapterId } = req.params;
@@ -131,33 +176,44 @@ exports.publishDraft = async (req, res) => {
         chapter.isDraft = false;
         await chapter.save();
 
-        // Now run the side effects that were skipped during draft save
+        // Branch-specific side effects
         if (chapter.parentChapterId) {
             await Story.findByIdAndUpdate(chapter.storyId, { $inc: { branchesCount: 1 } });
             await User.findByIdAndUpdate(req.user._id, { $inc: { totalStoriesBranched: 1 } });
             await checkAchievements(req.user._id);
+        }
 
-            try {
-                const sendFollowNotificationEmail = require("../Utils/FollowMailer");
-                const fullStory = await Story.findById(chapter.storyId).populate("author", "username");
-                const storyAuthor = await User.findById(fullStory.author._id)
+        // Notification for both branches and main chapters
+        try {
+            const sendFollowNotificationEmail = require("../Utils/FollowMailer");
+            const fullStory = await Story.findById(chapter.storyId).populate("author", "username");
+
+            if (fullStory && fullStory.author) {
+                const authorId = fullStory.author._id ?? fullStory.author;
+                const storyAuthor = await User.findById(authorId)
                     .populate("followers", "email username notificationPreferences");
+                const publishingUser = await User.findById(req.user._id).select("username");
 
-                for (const follower of storyAuthor.followers) {
-                    const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
-                    if (pref === "none") continue;
-                    await sendFollowNotificationEmail({
-                        toEmail: follower.email,
-                        toUsername: follower.username,
-                        authorUsername: req.user.username,
-                        storyTitle: `a new branch on "${fullStory.title}"`,
-                        storyId: chapter.storyId,
-                        type: "new_story",
-                    });
+                if (storyAuthor && storyAuthor.followers?.length) {
+                    for (const follower of storyAuthor.followers) {
+                        const pref = follower.notificationPreferences?.newStoryFromFollowing ?? "all";
+                        if (pref === "none") continue;
+                        await sendFollowNotificationEmail({
+                            toEmail: follower.email,
+                            toUsername: follower.username,
+                            authorUsername: publishingUser.username,
+                            storyTitle: chapter.parentChapterId
+                                ? `a new branch on "${fullStory.title}"`
+                                : `a new chapter in "${fullStory.title}"`,
+                            storyId: chapter.storyId,
+                            type: "new_story",
+                        });
+                    }
                 }
-            } catch (notifErr) {
-                console.error("Failed to send branch notifications:", notifErr.message);
             }
+        } catch (notifErr) {
+            console.error("Failed to send publish notifications:", notifErr.message);
+            console.error(notifErr.stack);
         }
 
         res.json({ message: "Chapter published successfully", chapter });
@@ -166,7 +222,7 @@ exports.publishDraft = async (req, res) => {
     }
 };
 
-// GET /api/chapters/story/:storyId/hierarchy
+// ==================== GET CHAPTERS HIERARCHY ====================
 exports.getChaptersHierarchy = async (req, res) => {
     try {
         const { storyId } = req.params;
@@ -174,12 +230,11 @@ exports.getChaptersHierarchy = async (req, res) => {
         const chapters = await Chapter.find({
             storyId,
             disabled: { $ne: true },
-            isDraft: { $ne: true }   // <-- add this
+            isDraft: { $ne: true }
         })
             .sort({ createdAt: 1 })
             .lean();
 
-        // Create map for quick lookup
         const chapterMap = {};
         chapters.forEach(chapter => {
             chapter.branches = [];
@@ -200,15 +255,13 @@ exports.getChaptersHierarchy = async (req, res) => {
         });
 
         res.json(rootChapters);
-
     } catch (err) {
         console.error(err);
         res.status(400).json({ error: err.message });
     }
 };
 
-
-// ==================== GET MAIN STORYLINE CHAPTERS (metadata only) ====================
+// ==================== GET MAIN STORYLINE CHAPTERS ====================
 exports.getMainChapters = async (req, res) => {
     try {
         const chapters = await Chapter.find(
@@ -216,7 +269,7 @@ exports.getMainChapters = async (req, res) => {
                 storyId: req.params.storyId,
                 isMainBranch: true,
                 disabled: { $ne: true },
-                isDraft: { $ne: true }   // <-- add this
+                isDraft: { $ne: true }
             },
             { title: 1, chapterNumber: 1, likes: 1 }
         ).sort({ chapterNumber: 1 });
@@ -228,12 +281,13 @@ exports.getMainChapters = async (req, res) => {
     }
 };
 
+// ==================== READ CHAPTER ====================
 exports.readChapter = async (req, res) => {
     try {
         const { storyId, chapterId } = req.params;
 
         const chapter = await Chapter.findOne({ _id: chapterId, storyId })
-            .populate("author", "username");  // ← ADD THIS
+            .populate("author", "username");
 
         if (!chapter) return res.status(404).json({ error: "Chapter not found" });
 
@@ -260,6 +314,7 @@ exports.readChapter = async (req, res) => {
         res.status(400).json({ error: err.message });
     }
 };
+
 // ==================== LIKE / UNLIKE CHAPTER ====================
 exports.likeChapter = async (req, res) => {
     try {
@@ -293,7 +348,6 @@ exports.likeChapter = async (req, res) => {
     }
 };
 
-
 // ==================== COMMENT ON CHAPTER ====================
 exports.commentChapter = async (req, res) => {
     try {
@@ -321,6 +375,7 @@ exports.commentChapter = async (req, res) => {
     }
 };
 
+// ==================== GET COMMENTS ====================
 exports.getComments = async (req, res) => {
     try {
         const chapter = await Chapter.findById(
@@ -337,6 +392,7 @@ exports.getComments = async (req, res) => {
     }
 };
 
+// ==================== GET BRANCHES ====================
 exports.getBranches = async (req, res) => {
     try {
         const branches = await Chapter.find({
@@ -350,7 +406,7 @@ exports.getBranches = async (req, res) => {
     }
 };
 
-// POST /api/chapters/:chapterId/comment/:commentId/reply
+// ==================== REPLY TO COMMENT ====================
 exports.replyToComment = async (req, res) => {
     try {
         const { chapterId, commentId } = req.params;
@@ -372,7 +428,6 @@ exports.replyToComment = async (req, res) => {
 
         await chapter.save();
 
-        // Return updated comments populated with usernames
         const populated = await Chapter.findById(chapterId).populate(
             "comments.user comments.replies.user",
             "username"
@@ -384,13 +439,12 @@ exports.replyToComment = async (req, res) => {
     }
 };
 
+// ==================== GET MY BRANCHES ====================
 exports.getMyBranches = async (req, res) => {
     try {
-        // In getMyBranches controller
         const branches = await Chapter.find({
             author: req.user._id,
             isMainBranch: false,
-            // ❌ Remove: disabled: false
         })
             .populate({
                 path: "storyId",
@@ -403,10 +457,8 @@ exports.getMyBranches = async (req, res) => {
             .populate("author", "username")
             .sort({ createdAt: -1 });
 
-        // Filter out branches from disabled stories
         const activeBranches = branches.filter(branch => branch.storyId && !branch.storyId.disabled);
 
-        // Shape the response to match the Story card format used in the frontend
         const formatted = activeBranches.map(branch => ({
             _id: branch._id,
             branchTitle: branch.branchTitle,
@@ -416,9 +468,7 @@ exports.getMyBranches = async (req, res) => {
             likes: branch.likes,
             views: branch.views,
             tags: branch.tags,
-
             disabled: branch.disabled,
-
             story: {
                 _id: branch.storyId._id,
                 title: branch.storyId.title,
@@ -441,6 +491,7 @@ exports.getMyBranches = async (req, res) => {
     }
 };
 
+// ==================== DISABLE CHAPTER ====================
 exports.disableChapter = async (req, res) => {
     try {
         const chapter = await Chapter.findById(req.params.chapterId);
@@ -464,6 +515,7 @@ exports.disableChapter = async (req, res) => {
     }
 };
 
+// ==================== ENABLE CHAPTER ====================
 exports.enableChapter = async (req, res) => {
     try {
         const chapter = await Chapter.findById(req.params.chapterId);
@@ -496,7 +548,6 @@ exports.updateChapter = async (req, res) => {
         const chapter = await Chapter.findById(chapterId);
         if (!chapter) return res.status(404).json({ error: "Chapter not found" });
 
-        // Allow editing disabled chapters only if they are drafts
         if (chapter.disabled && !chapter.isDraft) {
             return res.status(403).json({ error: "Cannot update a disabled chapter" });
         }
@@ -509,7 +560,6 @@ exports.updateChapter = async (req, res) => {
         if (content) chapter.content = content;
         if (!chapter.isMainBranch && branchTitle) chapter.branchTitle = branchTitle;
 
-        // Allow transitioning draft → published via update
         if (isDraft === false || isDraft === "false") {
             const wasAlreadyPublished = !chapter.isDraft;
             chapter.isDraft = false;
@@ -545,17 +595,14 @@ exports.deleteChapter = async (req, res) => {
             return res.status(403).json({ error: "Not authorized" });
         }
 
-        // Check if chapter has branches
         const branchCount = await Chapter.countDocuments({
             parentChapterId: chapterId,
             disabled: { $ne: true }
         });
 
-        // 🔹 If branches exist → disable instead of delete
         if (branchCount > 0) {
             chapter.disabled = true;
             chapter.disabledByStory = false;
-
             await chapter.save();
 
             return res.json({
@@ -563,15 +610,15 @@ exports.deleteChapter = async (req, res) => {
             });
         }
 
-        // 🔹 No branches → safe to delete
         await Chapter.findByIdAndDelete(chapterId);
 
         res.json({ message: "Chapter deleted successfully" });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
+
+// ==================== TOGGLE CHAPTER BOOKMARK ====================
 exports.toggleChapterBookmark = async (req, res) => {
     try {
         const { chapterId } = req.params;
@@ -586,9 +633,7 @@ exports.toggleChapterBookmark = async (req, res) => {
             user.bookmarkedChapters = user.bookmarkedChapters.filter(
                 id => id.toString() !== chapterId
             );
-
             await user.save();
-
             return res.json({ bookmarked: false });
         }
 
@@ -596,12 +641,12 @@ exports.toggleChapterBookmark = async (req, res) => {
         await user.save();
 
         return res.json({ bookmarked: true });
-
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
+// ==================== GET BOOKMARKED CHAPTERS ====================
 exports.getBookmarkedChapters = async (req, res) => {
     try {
         const user = await User.findById(req.user._id)
@@ -624,6 +669,7 @@ exports.getBookmarkedChapters = async (req, res) => {
     }
 };
 
+// ==================== GET BRANCHES BY USER ====================
 exports.getBranchesByUser = async (req, res) => {
     try {
         const branches = await Chapter.find({
@@ -669,4 +715,3 @@ exports.getBranchesByUser = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
-
